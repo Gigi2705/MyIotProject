@@ -1,13 +1,5 @@
-import init from 'react_native_mqtt';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-init({
-  size: 10000,
-  storageBackend: AsyncStorage,
-  defaultExpires: 1000 * 3600 * 24,
-  enableCache: true,
-  sync: {},
-});
+import mqtt from 'mqtt';
 
 export default class MQTTService {
   constructor() {
@@ -17,23 +9,26 @@ export default class MQTTService {
   connect(config, onMessage, onConnect, onFailure) {
     const { host, port, path, user, pass, clientId } = config;
 
-    this.client = new Paho.MQTT.Client(host, port, path, clientId);
+    const url = `wss://${host}:${port}${path}`;
 
-    this.client.onMessageArrived = (message) => {
-      onMessage(message.destinationName, message.payloadString);
-    };
-
-    const options = {
-      userName: user,
+    this.client = mqtt.connect(url, {
+      username: user,
       password: pass,
-      useSSL: true,
-      onSuccess: onConnect,
-      onFailure: onFailure,
-      timeout: 3,
-      keepAliveInterval: 60,
-    };
+      clientId: clientId,
+      rejectUnauthorized: false,
+    });
 
-    this.client.connect(options);
+    this.client.on('connect', () => {
+      onConnect();
+    });
+
+    this.client.on('message', (topic, message) => {
+      onMessage(topic, message.toString());
+    });
+
+    this.client.on('error', (err) => {
+      onFailure(err);
+    });
   }
 
   subscribe(topic) {
@@ -41,8 +36,6 @@ export default class MQTTService {
   }
 
   publish(topic, message) {
-    const msg = new Paho.MQTT.Message(message);
-    msg.destinationName = topic;
-    this.client.send(msg);
+    this.client.publish(topic, message);
   }
 }
